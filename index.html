@@ -1,100 +1,40 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { margin: 0; padding: 0; background: transparent; overflow: hidden; font-family: sans-serif; }
+        body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
         #canvas { width: 100vw; height: 56.25vw; position: relative; }
-        #ui { position: absolute; top: 10px; left: 10px; background: white; padding: 15px; border-radius: 8px; z-index: 100; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-        .stamped { position: absolute; transform: translate(-50%, -50%); animation: fadeIn 1s forwards; }
+        .stamped { 
+            position: absolute; transform: translate(-50%, -50%); 
+            animation: fadeIn 0.5s ease-out forwards; 
+        }
         .fade-out { opacity: 0; transition: opacity 1s; }
-        @keyframes fadeIn { from { opacity: 0; transform: translate(-50%, -50%) scale(1.2); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
-        #ghost { position: absolute; opacity: 0.4; pointer-events: none; display: none; transform: translate(-50%, -50%); }
+        @keyframes fadeIn { from { opacity: 0; scale: 1.2; } to { opacity: 1; scale: 1; } }
     </style>
 </head>
 <body>
+    <div id="canvas"></div>
+    <script>
+        // REPLACE 'my-secret-room-123' with a unique name for your stream
+        const peer = new Peer('my-unique-obs-room'); 
 
-<div id="ui">
-    <div id="setup-area">
-        <strong>Your ID:</strong> <span id="my-id">Loading...</span><br>
-        <input type="text" id="conn-id" placeholder="Enter Friend's ID to Send">
-        <button onclick="connectToPeer()">Connect</button>
-    </div>
-    <hr>
-    <input type="text" id="img-url" placeholder="Paste Image URL">
-    <input type="range" id="size" min="50" max="800" value="300">
-</div>
+        peer.on('connection', (conn) => {
+            conn.on('data', (data) => {
+                const img = document.createElement('img');
+                img.src = data.url;
+                img.className = 'stamped';
+                img.style.width = data.size + 'px';
+                img.style.left = data.x + '%';
+                img.style.top = data.y + '%';
+                document.getElementById('canvas').appendChild(img);
 
-<div id="canvas">
-    <img id="ghost" src="">
-</div>
-
-<script>
-    const peer = new Peer();
-    let conn;
-    const canvas = document.getElementById('canvas');
-    const ghost = document.getElementById('ghost');
-
-    // Display your ID for OBS
-    peer.on('open', id => { document.getElementById('my-id').innerText = id; });
-
-    // Handle Incoming Connections (Your OBS receiving images)
-    peer.on('connection', (c) => {
-        c.on('data', (data) => {
-            renderImage(data.url, data.x, data.y, data.size);
+                setTimeout(() => {
+                    img.classList.add('fade-out');
+                    setTimeout(() => img.remove(), 1000);
+                }, 3000);
+            });
         });
-    });
-
-    // Handle Outgoing Connections (Your friend sending images)
-    function connectToPeer() {
-        const targetId = document.getElementById('conn-id').value;
-        conn = peer.connect(targetId);
-    }
-
-    function renderImage(url, x, y, size) {
-        const img = document.createElement('img');
-        img.src = url;
-        img.className = 'stamped';
-        img.style.width = size + 'px';
-        img.style.left = x + '%';
-        img.style.top = y + '%';
-        canvas.appendChild(img);
-        setTimeout(() => {
-            img.classList.add('fade-out');
-            setTimeout(() => img.remove(), 1000);
-        }, 3000);
-    }
-
-    // Click to Send/Place
-    canvas.addEventListener('click', (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const data = {
-            url: document.getElementById('img-url').value,
-            size: document.getElementById('size').value,
-            x: ((e.clientX - rect.left) / rect.width) * 100,
-            y: ((e.clientY - rect.top) / rect.height) * 100
-        };
-        
-        // If connected, send to peer. If not, show locally.
-        if (conn && conn.open) {
-            conn.send(data);
-        } else {
-            renderImage(data.url, data.x, data.y, data.size);
-        }
-    });
-
-    // Ghost Preview Logic
-    canvas.addEventListener('mousemove', (e) => {
-        const url = document.getElementById('img-url').value;
-        if(url) {
-            ghost.src = url;
-            ghost.style.display = 'block';
-            ghost.style.width = document.getElementById('size').value + 'px';
-            ghost.style.left = e.clientX + 'px';
-            ghost.style.top = e.clientY + 'px';
-        }
-    });
-</script>
+    </script>
 </body>
 </html>

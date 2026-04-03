@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        body { margin: 0; display: flex; flex-direction: column; align-items: center; background: #222; color: white; font-family: sans-serif; }
+        #controls { padding: 20px; background: #333; width: 100%; display: flex; gap: 20px; justify-content: center; }
+        #canvas-preview { 
+            width: 90vw; height: 50.62vw; border: 2px solid #555; 
+            margin-top: 20px; position: relative; cursor: crosshair; background: #111;
+        }
+        #ghost { position: absolute; opacity: 0.5; pointer-events: none; transform: translate(-50%, -50%); display: none; }
+        input[type="text"] { width: 300px; padding: 10px; }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <input type="text" id="url" placeholder="Paste Image URL here">
+        <label>Size: <input type="range" id="size" min="50" max="1000" value="300"></label>
+        <span id="status">Connecting to OBS...</span>
+    </div>
+    <div id="canvas-preview" id="preview">
+        <img id="ghost" src="">
+    </div>
+
+    <script>
+        const peer = new Peer();
+        let conn;
+        const targetRoom = 'my-unique-obs-room'; // MUST MATCH THE RECEIVER ID
+
+        peer.on('open', () => {
+            conn = peer.connect(targetRoom);
+            conn.on('open', () => document.getElementById('status').innerText = "✅ CONNECTED TO OBS");
+        });
+
+        const preview = document.getElementById('canvas-preview');
+        const ghost = document.getElementById('ghost');
+
+        preview.addEventListener('mousemove', (e) => {
+            const url = document.getElementById('url').value;
+            if(!url) return;
+            ghost.src = url;
+            ghost.style.display = 'block';
+            ghost.style.width = document.getElementById('size').value + 'px';
+            const rect = preview.getBoundingClientRect();
+            ghost.style.left = (e.clientX - rect.left) + 'px';
+            ghost.style.top = (e.clientY - rect.top) + 'px';
+        });
+
+        preview.addEventListener('click', (e) => {
+            if (!conn || !conn.open) return alert("Not connected to OBS!");
+            const rect = preview.getBoundingClientRect();
+            conn.send({
+                url: document.getElementById('url').value,
+                size: document.getElementById('size').value,
+                x: ((e.clientX - rect.left) / rect.width) * 100,
+                y: ((e.clientY - rect.top) / rect.height) * 100
+            });
+        });
+    </script>
+</body>
+</html>

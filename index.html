@@ -2,150 +2,99 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Client-Side OBS Stamper</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        :root { --accent: #007bff; }
-        body {
-            margin: 0; padding: 0;
-            background: transparent; 
-            display: flex; flex-direction: column;
-            justify-content: center; align-items: center;
-            height: 100vh; width: 100vw;
-            overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-
-        /* UI Panel - Hidden in OBS via CSS if desired, or just used in Interact */
-        #ui-panel {
-            position: absolute; top: 20px; z-index: 1000;
-            background: #ffffff; padding: 15px;
-            border-radius: 12px; display: flex; gap: 20px;
-            box-shadow: 0 8px 30px rgba(0,0,0,0.3);
-            align-items: center; border: 1px solid #ddd;
-        }
-
-        input[type="text"] { 
-            width: 280px; padding: 10px; 
-            border: 2px solid #eee; border-radius: 6px;
-            outline: none; transition: border-color 0.2s;
-        }
-        input[type="text"]:focus { border-color: var(--accent); }
-        
-        .control-group { display: flex; flex-direction: column; gap: 4px; }
-        label { font-size: 10px; font-weight: bold; color: #666; text-transform: uppercase; }
-
-        /* The 16:9 OBS Canvas */
-        #obs-canvas {
-            width: 100vw; height: 56.25vw; 
-            max-height: 100vh; max-width: 177.78vh;
-            position: relative; cursor: crosshair;
-            background: rgba(255, 255, 255, 0.05); /* Ghostly guide */
-        }
-
-        /* Placed Image Styling */
-        .stamped-image {
-            position: absolute;
-            transform: translate(-50%, -50%);
-            pointer-events: none;
-            animation: img-entry 1s ease-out forwards;
-        }
-
-        /* The Ghost Preview */
-        #ghost {
-            position: absolute;
-            transform: translate(-50%, -50%);
-            pointer-events: none;
-            opacity: 0.4;
-            display: none;
-            filter: grayscale(0.5);
-            border: 2px dashed rgba(255,255,255,0.3);
-        }
-
-        .fade-out { opacity: 0; transition: opacity 1s ease-in; }
-
-        @keyframes img-entry {
-            0% { opacity: 0; transform: translate(-50%, -50%) scale(1.1); filter: brightness(2); }
-            100% { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: brightness(1); }
-        }
+        body { margin: 0; padding: 0; background: transparent; overflow: hidden; font-family: sans-serif; }
+        #canvas { width: 100vw; height: 56.25vw; position: relative; }
+        #ui { position: absolute; top: 10px; left: 10px; background: white; padding: 15px; border-radius: 8px; z-index: 100; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .stamped { position: absolute; transform: translate(-50%, -50%); animation: fadeIn 1s forwards; }
+        .fade-out { opacity: 0; transition: opacity 1s; }
+        @keyframes fadeIn { from { opacity: 0; transform: translate(-50%, -50%) scale(1.2); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+        #ghost { position: absolute; opacity: 0.4; pointer-events: none; display: none; transform: translate(-50%, -50%); }
     </style>
 </head>
 <body>
 
-    <div id="ui-panel">
-        <div class="control-group">
-            <label>Image URL</label>
-            <input type="text" id="img-url" placeholder="Paste Direct Link (.png, .jpg, .gif)">
-        </div>
-        <div class="control-group">
-            <label>Scale</label>
-            <input type="range" id="scale" min="50" max="1000" value="350">
-        </div>
-        <div style="color: #999; font-size: 11px; width: 80px;">Click Canvas to Place</div>
+<div id="ui">
+    <div id="setup-area">
+        <strong>Your ID:</strong> <span id="my-id">Loading...</span><br>
+        <input type="text" id="conn-id" placeholder="Enter Friend's ID to Send">
+        <button onclick="connectToPeer()">Connect</button>
     </div>
+    <hr>
+    <input type="text" id="img-url" placeholder="Paste Image URL">
+    <input type="range" id="size" min="50" max="800" value="300">
+</div>
 
-    <div id="obs-canvas">
-        <img id="ghost" src="" alt="">
-    </div>
+<div id="canvas">
+    <img id="ghost" src="">
+</div>
 
-    <script>
-        const canvas = document.getElementById('obs-canvas');
-        const urlInput = document.getElementById('img-url');
-        const scaleSlider = document.getElementById('scale');
-        const ghost = document.getElementById('ghost');
+<script>
+    const peer = new Peer();
+    let conn;
+    const canvas = document.getElementById('canvas');
+    const ghost = document.getElementById('ghost');
 
-        // Logic to update ghost visual
-        const updateGhost = () => {
-            const val = urlInput.value.trim();
-            if (val) {
-                ghost.src = val;
-                ghost.style.width = scaleSlider.value + 'px';
-                ghost.style.display = 'block';
-            } else {
-                ghost.style.display = 'none';
-            }
+    // Display your ID for OBS
+    peer.on('open', id => { document.getElementById('my-id').innerText = id; });
+
+    // Handle Incoming Connections (Your OBS receiving images)
+    peer.on('connection', (c) => {
+        c.on('data', (data) => {
+            renderImage(data.url, data.x, data.y, data.size);
+        });
+    });
+
+    // Handle Outgoing Connections (Your friend sending images)
+    function connectToPeer() {
+        const targetId = document.getElementById('conn-id').value;
+        conn = peer.connect(targetId);
+    }
+
+    function renderImage(url, x, y, size) {
+        const img = document.createElement('img');
+        img.src = url;
+        img.className = 'stamped';
+        img.style.width = size + 'px';
+        img.style.left = x + '%';
+        img.style.top = y + '%';
+        canvas.appendChild(img);
+        setTimeout(() => {
+            img.classList.add('fade-out');
+            setTimeout(() => img.remove(), 1000);
+        }, 3000);
+    }
+
+    // Click to Send/Place
+    canvas.addEventListener('click', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const data = {
+            url: document.getElementById('img-url').value,
+            size: document.getElementById('size').value,
+            x: ((e.clientX - rect.left) / rect.width) * 100,
+            y: ((e.clientY - rect.top) / rect.height) * 100
         };
+        
+        // If connected, send to peer. If not, show locally.
+        if (conn && conn.open) {
+            conn.send(data);
+        } else {
+            renderImage(data.url, data.x, data.y, data.size);
+        }
+    });
 
-        urlInput.addEventListener('input', updateGhost);
-        scaleSlider.addEventListener('input', updateGhost);
-
-        // Follow Mouse
-        canvas.addEventListener('mousemove', (e) => {
-            const rect = canvas.getBoundingClientRect();
-            ghost.style.left = (e.clientX - rect.left) + 'px';
-            ghost.style.top = (e.clientY - rect.top) + 'px';
-        });
-
-        // Place Image
-        canvas.addEventListener('click', (e) => {
-            const src = urlInput.value.trim();
-            if (!src) return;
-
-            const rect = canvas.getBoundingClientRect();
-            const x = ((e.clientX - rect.left) / rect.width) * 100;
-            const y = ((e.clientY - rect.top) / rect.height) * 100;
-
-            const img = document.createElement('img');
-            img.src = src;
-            img.className = 'stamped-image';
-            img.style.width = scaleSlider.value + 'px';
-            img.style.left = x + '%';
-            img.style.top = y + '%';
-
-            canvas.appendChild(img);
-
-            // Timer for fade out
-            setTimeout(() => {
-                img.classList.add('fade-out');
-                setTimeout(() => img.remove(), 1000);
-            }, 3000);
-        });
-
-        // Hide UI for OBS view if needed (Toggle with 'H' key)
-        document.addEventListener('keydown', (e) => {
-            if (e.key.toLowerCase() === 'h') {
-                const ui = document.getElementById('ui-panel');
-                ui.style.display = ui.style.display === 'none' ? 'flex' : 'none';
-            }
-        });
-    </script>
+    // Ghost Preview Logic
+    canvas.addEventListener('mousemove', (e) => {
+        const url = document.getElementById('img-url').value;
+        if(url) {
+            ghost.src = url;
+            ghost.style.display = 'block';
+            ghost.style.width = document.getElementById('size').value + 'px';
+            ghost.style.left = e.clientX + 'px';
+            ghost.style.top = e.clientY + 'px';
+        }
+    });
+</script>
 </body>
 </html>
